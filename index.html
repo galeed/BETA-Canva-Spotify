@@ -1263,40 +1263,50 @@
       });
     });
 
-    // EXPORT
+    // BOTONES DE EXPORTACIÓN Y VISTA PREVIA
+    document.getElementById('previewBtn').addEventListener('click', () => {
+      if (!state.mediaType) return showToast('Importa media primero', 'error');
+      if (state.mediaType === 'video') {
+        if (video.paused) { video.play(); state.isPlaying = true; } else { video.pause(); state.isPlaying = false; }
+        updatePlayBtn();
+      } else { showToast('Imagen renderizada ✓', 'success'); renderFrame(); }
+    });
+
     document.getElementById('exportImageBtn').addEventListener('click', () => {
-      if (!state.mediaType) { showToast('Importa media primero', 'error'); return; }
+      if (!state.mediaType) return showToast('Importa media primero', 'error');
       renderFrame();
       const link = document.createElement('a');
       link.download = `canvas_${state.activeFilter}_${Date.now()}.png`;
       link.href = canvas.toDataURL('image/png');
+      
+      // SOLUCIÓN: Añadir el enlace al documento, hacer clic y removerlo
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+      
       showToast('PNG descargado ✓', 'success');
     });
 
     document.getElementById('exportVideoBtn').addEventListener('click', async () => {
-      if (!state.mediaType) { showToast('Importa media primero', 'error'); return; }
-
+      if (!state.mediaType) return showToast('Importa media primero', 'error');
+      
       const qualityMap = { high: 8000000, medium: 4000000, low: 1500000 };
       const fpsMap = { '30': 30, '24': 24, '60': 60 };
       const bitsPerSec = qualityMap[document.getElementById('qualitySelect').value] || 8000000;
       const fps = fpsMap[document.getElementById('fpsSelect').value] || 30;
 
-      const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' :
-        MediaRecorder.isTypeSupported('video/webm;codecs=h264') ? 'video/webm;codecs=h264' : 'video/webm';
-
+      const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : MediaRecorder.isTypeSupported('video/webm;codecs=h264') ? 'video/webm;codecs=h264' : 'video/webm';
+      
       const stream = canvas.captureStream(fps);
       const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: bitsPerSec });
       const chunks = [];
       recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
-      progressWrap.classList.add('visible');
-      progressBar.style.width = '0%';
-      progressLabel.textContent = 'Grabando…';
+      progressWrap.classList.add('visible'); progressBar.style.width = '0%'; progressLabel.textContent = 'Grabando…';
 
       let duration = 4000;
       if (state.mediaType === 'video' && video.duration) {
-        duration = Math.min(video.duration, 8) * 1000;
+        duration = Math.min(video.duration, 8) * 1000; // Limita a 8 segundos para Canvas
         video.currentTime = 0;
         await video.play();
       }
@@ -1309,18 +1319,12 @@
         const pct = Math.min((elapsed / duration) * 100, 99);
         progressBar.style.width = pct + '%';
         progressLabel.textContent = `Renderizando… ${Math.round(pct)}%`;
+        state.grainSeed++; renderFrame();
 
-        state.grainSeed++;
-        renderFrame();
-
-        if (elapsed < duration) {
-          setTimeout(recordLoop, 1000 / fps);
-        } else {
-          recorder.stop();
-          if (state.mediaType === 'video') video.pause();
-        }
+        if (elapsed < duration) setTimeout(recordLoop, 1000 / fps);
+        else { recorder.stop(); if (state.mediaType === 'video') video.pause(); }
       };
-
+      
       recordLoop();
 
       recorder.onstop = () => {
@@ -1328,15 +1332,20 @@
         const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `spotify_canvas_${state.activeFilter}_${Date.now()}.${ext}`;
+        a.href = url; 
+        a.download = `canvas_video_${state.activeFilter}_${Date.now()}.${ext}`; 
+        
+        // SOLUCIÓN: Añadir el enlace al documento, hacer clic y removerlo
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
+        
         URL.revokeObjectURL(url);
-        progressWrap.classList.remove('visible');
-        progressBar.style.width = '0%';
+        progressWrap.classList.remove('visible'); progressBar.style.width = '0%';
         showToast('Video exportado ✓', 'success');
       };
     });
+
 
     document.getElementById('previewBtn').addEventListener('click', () => {
       if (!state.mediaType) { showToast('Importa media primero', 'error'); return; }
